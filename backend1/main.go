@@ -66,8 +66,6 @@ func processPayment() func(w http.ResponseWriter, r *http.Request) {
 		ctx, span := tracer.Start(r.Context(), "HTTP POST /api/payment")
 		defer span.End()
 
-		fmt.Println("new payment")
-
 		var p struct {
 			Amount string `json:"amount"`
 			CardID string `json:"card_id"`
@@ -76,11 +74,9 @@ func processPayment() func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
 		err := json.Unmarshal(b, &p)
 		if err != nil {
-			fmt.Println("error processing payment", err.Error())
-
 			span.RecordError(err)
 
-			w.WriteHeader(http.StatusBadRequest)
+			http.Error(w, err.Error(), http.StatusBadRequest)
 
 			return
 		}
@@ -88,23 +84,19 @@ func processPayment() func(w http.ResponseWriter, r *http.Request) {
 		paymentID := rand.Int()
 
 		if err := fraudScoringCheck(ctx, p.CardID, p.Amount); err != nil {
-			fmt.Println("error processing payment", err.Error())
-
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 
-			w.WriteHeader(http.StatusInternalServerError)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 
 			return
 		}
 
 		if err := save(ctx, fmt.Sprintf("%d", paymentID)); err != nil {
-			fmt.Println("error processing payment", err.Error())
-
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 
-			w.WriteHeader(http.StatusInternalServerError)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 
 			return
 		}

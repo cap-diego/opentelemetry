@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -29,7 +30,6 @@ const name string = "fraud"
 var tracer trace.Tracer
 
 func main() {
-	fmt.Println("creating notification backend...")
 
 	l := log.New(os.Stdout, "", 0)
 
@@ -68,15 +68,12 @@ func main() {
 
 		span.AddEvent("an-event")
 
-		fmt.Println("new request")
-
 		var p struct {
 			CardID string `json:"card_id"`
 		}
 
 		b, err := io.ReadAll(r.Body)
 		if err != nil {
-			fmt.Println("error reading body", err.Error())
 
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
@@ -87,9 +84,7 @@ func main() {
 			return
 		}
 
-		fmt.Println("body", string(b))
 		if err := json.Unmarshal(b, &p); err != nil {
-			fmt.Println("error processing payment", err.Error())
 
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
@@ -101,10 +96,20 @@ func main() {
 		}
 
 		if err := save(ctx, p.CardID); err != nil {
-			fmt.Println("error saving", err.Error())
 
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
+			labeler.Add(attribute.Bool("error", true))
+
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		status, err := checkFraud(ctx, p.CardID)
+		if err != nil || status != "active" {
+
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "error")
 			labeler.Add(attribute.Bool("error", true))
 
 			w.WriteHeader(http.StatusInternalServerError)
@@ -125,6 +130,37 @@ func main() {
 	); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func checkFraud(ctx context.Context, cardID string) (string, error) {
+	_, span := tracer.Start(ctx, "check-fraud")
+	defer span.End()
+
+	req, _ := http.NewRequest("GET",
+		"http://localhost:9001/api/fraud",
+		strings.NewReader(fmt.Sprintf(`{"card_id":"%s"}`, cardID)),
+	)
+
+	ctx, cancelFn := context.WithTimeout(ctx, 3*time.Second)
+	defer cancelFn()
+
+	req.WithContext(ctx)
+	req.Header.Set("content-type", "application/json")
+
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+
+	b, _ := io.ReadAll(response.Body)
+
+	var p struct {
+		Status string `json:"status"`
+	}
+
+	json.Unmarshal(b, &p)
+
+	return p.Status, nil
 }
 
 func save(ctx context.Context, cardID string) error {

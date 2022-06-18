@@ -51,10 +51,13 @@ func main() {
 	tracer = tp.Tracer(name)
 
 	http.HandleFunc("/api/fraud", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			get(w, r)
+			return
+		}
+
 		ctx, span := tracer.Start(r.Context(), "HTTP POST /api/fraud")
 		defer span.End()
-
-		fmt.Println("new request")
 
 		var p struct {
 			Amount string `json:"amount"`
@@ -63,8 +66,6 @@ func main() {
 
 		b, err := io.ReadAll(r.Body)
 		if err != nil {
-			fmt.Println("error reading body", err.Error())
-
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 
@@ -73,10 +74,7 @@ func main() {
 			return
 		}
 
-		fmt.Println("body", string(b))
 		if err := json.Unmarshal(b, &p); err != nil {
-			fmt.Println("error processing payment", err.Error())
-
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 
@@ -88,8 +86,6 @@ func main() {
 		approved := score(ctx, p.CardID, p.Amount)
 
 		if err := save(ctx, p.CardID, p.Amount, approved); err != nil {
-			fmt.Println("error saving", err.Error())
-
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 
@@ -98,8 +94,6 @@ func main() {
 		}
 
 		if err := sendNotification(ctx, p.CardID); err != nil {
-			fmt.Println("error sending notification", err.Error())
-
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 
@@ -114,6 +108,28 @@ func main() {
 	if err := http.ListenAndServe("localhost:9001", nil); err != nil {
 		panic(err)
 	}
+}
+
+func get(w http.ResponseWriter, r *http.Request) {
+	_, span := tracer.Start(r.Context(), "HTTP GET /api/fraud")
+	defer span.End()
+
+	var p struct {
+		CardID string `json:"card_id"`
+	}
+	b, _ := io.ReadAll(r.Body)
+	if err := json.Unmarshal(b, &p); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+
+		w.WriteHeader(http.StatusBadRequest)
+
+		return
+	}
+
+	time.Sleep(250 * time.Millisecond)
+
+	w.Write([]byte(fmt.Sprintf(`{"status":"active"}`)))
 }
 
 func score(ctx context.Context, cardID, amount string) bool {

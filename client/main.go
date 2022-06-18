@@ -16,11 +16,11 @@ func main() {
 	fmt.Println("creating clients")
 	var wg sync.WaitGroup
 
-	wg.Add(3)
-
-	go doWork()
-	go doWork()
-	go doWork()
+	var count = 16
+	wg.Add(count)
+	for i := 0; i < count; i++ {
+		go doWork()
+	}
 
 	wg.Wait()
 }
