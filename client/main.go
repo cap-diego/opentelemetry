@@ -7,13 +7,25 @@ import (
 	"math/rand"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
 func main() {
 
-	fmt.Println("creating client")
+	fmt.Println("creating clients")
+	var wg sync.WaitGroup
 
+	wg.Add(3)
+
+	go doWork()
+	go doWork()
+	go doWork()
+
+	wg.Wait()
+}
+
+func doWork() {
 	t := time.NewTicker(500 * time.Millisecond)
 
 	for {
@@ -29,8 +41,8 @@ func main() {
 					"application/json",
 					strings.NewReader(fmt.Sprintf(`{"card_id":"%d", "amount":"%d"}`, cardID, amount)))
 
-				if err != nil {
-					fmt.Println("error creating payment", err.Error())
+				if err != nil || response.StatusCode != http.StatusOK {
+					fmt.Println("error creating payment")
 					return
 				}
 
@@ -40,14 +52,16 @@ func main() {
 				}
 
 				if err := json.Unmarshal(b, &p); err != nil {
-					fmt.Println("error payment response", err.Error())
+					fmt.Println("error payment response", err.Error(), "body", b)
 					return
 				}
 
 				fmt.Println("payment id", p.ID, "created successfully")
 			}()
+
 		default:
 
 		}
 	}
+
 }

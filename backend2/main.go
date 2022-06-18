@@ -18,6 +18,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -50,7 +51,7 @@ func main() {
 	tracer = tp.Tracer(name)
 
 	http.HandleFunc("/api/fraud", func(w http.ResponseWriter, r *http.Request) {
-		ctx, span := tracer.Start(r.Context(), "process")
+		ctx, span := tracer.Start(r.Context(), "HTTP POST /api/fraud")
 		defer span.End()
 
 		fmt.Println("new request")
@@ -96,6 +97,16 @@ func main() {
 			return
 		}
 
+		if err := sendNotification(ctx, p.CardID); err != nil {
+			fmt.Println("error sending notification", err.Error())
+
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
 		w.WriteHeader(http.StatusOK)
 		return
 	})
@@ -112,6 +123,26 @@ func score(ctx context.Context, cardID, amount string) bool {
 	time.Sleep(800 * time.Millisecond)
 
 	return rand.Intn(2) == 1
+}
+
+func sendNotification(ctx context.Context, cardID string) error {
+	_, span := tracer.Start(ctx, "notification-api")
+	defer span.End()
+
+	req, _ := http.NewRequest("POST",
+		"http://localhost:9003/api/notification",
+		strings.NewReader(fmt.Sprintf(`{"card_id":"%s"}`, cardID)),
+	)
+
+	ctx, cancelFn := context.WithTimeout(ctx, 3*time.Second)
+	defer cancelFn()
+
+	req.WithContext(ctx)
+	req.Header.Set("content-type", "application/json")
+
+	_, err := http.DefaultClient.Do(req)
+
+	return err
 }
 
 func save(ctx context.Context, cardID, amount string, approved bool) error {

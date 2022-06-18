@@ -63,7 +63,7 @@ func main() {
 
 func processPayment() func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx, span := tracer.Start(r.Context(), "process")
+		ctx, span := tracer.Start(r.Context(), "HTTP POST /api/payment")
 		defer span.End()
 
 		fmt.Println("new payment")
