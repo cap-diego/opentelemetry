@@ -101,7 +101,7 @@ func processPayment() func(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		fmt.Println("payment id", paymentID, "created successfully")
+		// fmt.Println("payment id", paymentID, "created successfully")
 
 		w.Write([]byte(fmt.Sprintf(`{"id":"%d"}`, paymentID)))
 

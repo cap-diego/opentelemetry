@@ -30,7 +30,7 @@ const name string = "fraud"
 var tracer trace.Tracer
 
 func main() {
-
+	// this backed uses SigNoz as observability & monitoring platform
 	l := log.New(os.Stdout, "", 0)
 
 	exp, err := otlptrace.New(
@@ -54,16 +54,20 @@ func main() {
 		}
 	}()
 
+	fmt.Println("settings trace provider")
 	otel.SetTracerProvider(tp)
 
 	tracer = tp.Tracer(name)
+	fmt.Println("tracer set")
 
 	h := func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("handler")
 		ctx, span := tracer.Start(r.Context(),
 			"process",
 			trace.WithAttributes(attribute.String("a", "val")),
 		)
 		defer span.End()
+
 		labeler, _ := otelhttp.LabelerFromContext(ctx)
 
 		span.AddEvent("an-event")
@@ -123,6 +127,8 @@ func main() {
 
 	var mux http.ServeMux
 	mux.Handle("/api/notification", otelhttp.WithRouteTag("/api/notification", http.HandlerFunc(h)))
+
+	fmt.Println("handler set")
 
 	if err := http.ListenAndServe(":9003", otelhttp.NewHandler(&mux,
 		"POST /api/notification",

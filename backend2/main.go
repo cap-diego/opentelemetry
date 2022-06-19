@@ -94,6 +94,8 @@ func main() {
 		}
 
 		if err := sendNotification(ctx, p.CardID); err != nil {
+			fmt.Println("error sending notification", err.Error())
+
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 
